@@ -1,69 +1,190 @@
-import Image from "next/image";
+"use client";
+
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
+
+  const [name, setName] = useState("");
+  const [location, setLocation] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const validText = (value: string) => /^[A-Za-zÀ-ÿ' -]+$/.test(value.trim());
+
+  const isFormValid =
+    name.trim().length > 1 &&
+    location.trim().length > 1 &&
+    validText(name) &&
+    validText(location);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+
+    if (!isFormValid) {
+      setError("Please enter a valid name and location using letters only.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        "https://us-central1-frontend-simplified.cloudfunctions.net/skinstricPhaseOne",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            location: location.trim(),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Unable to submit your information.");
+      }
+
+      const data = await response.json();
+
+      console.log("Phase One response:", data);
+
+      localStorage.setItem(
+        "skinstricUser",
+        JSON.stringify({
+          name: name.trim(),
+          location: location.trim(),
+        }),
+      );
+
+      router.push("/analysis");
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <main className="flex min-h-screen flex-col bg-white text-black">
+      {/* HEADER */}
+      <header className="flex items-center justify-between px-6 py-5 md:px-10">
+        <div className="flex items-center gap-4">
+          <h1 className="text-sm font-bold uppercase tracking-tight">
+            Skinstric
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <span className="hidden text-xs uppercase text-gray-500 sm:block">
+            [ Intro ]
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="bg-black px-4 py-2 text-xs font-semibold uppercase text-white"
+        >
+          Enter Code
+        </button>
+      </header>
+
+      {/* FORM */}
+      <section className="flex flex-1 items-center justify-center px-6">
+        <div className="w-full max-w-lg text-center">
+          <p className="mb-5 text-xs font-semibold uppercase">
+            To Start Analysis
           </p>
+
+          <form onSubmit={handleSubmit}>
+            <div className="mb-8">
+              <label
+                htmlFor="name"
+                className="mb-2 block text-xs uppercase text-gray-400"
+              >
+                Click to type
+              </label>
+
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setError("");
+                }}
+                placeholder="Introduce yourself"
+                autoComplete="name"
+                className="w-full border-b border-black bg-transparent px-2 py-3 text-center text-3xl font-normal outline-none placeholder:text-gray-500"
+              />
+            </div>
+
+            <div className="mb-8">
+              <label
+                htmlFor="location"
+                className="mb-2 block text-xs uppercase text-gray-400"
+              >
+                Your location
+              </label>
+
+              <input
+                id="location"
+                type="text"
+                value={location}
+                onChange={(event) => {
+                  setLocation(event.target.value);
+                  setError("");
+                }}
+                placeholder="Where are you from?"
+                autoComplete="address-level2"
+                className="w-full border-b border-black bg-transparent px-2 py-3 text-center text-3xl font-normal outline-none placeholder:text-gray-500"
+              />
+            </div>
+
+            {error && <p className="mb-6 text-sm text-red-600">{error}</p>}
+
+            <button
+              type="submit"
+              disabled={!isFormValid || loading}
+              className="border border-black px-7 py-3 text-xs font-bold uppercase transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-300 disabled:hover:bg-transparent"
+            >
+              {loading ? "Submitting..." : "Proceed"}
+            </button>
+          </form>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </section>
+
+      {/* FOOTER CONTROLS */}
+      <footer className="flex items-center justify-between px-6 py-6 md:px-10">
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          className="flex items-center gap-3 text-xs font-semibold uppercase"
+        >
+          <span className="flex h-9 w-9 rotate-45 items-center justify-center border border-black">
+            <span className="-rotate-45">←</span>
+          </span>
+          Back
+        </button>
+
+        <button
+          type="button"
+          disabled={!isFormValid || loading}
+          onClick={() => {
+            const form = document.querySelector("form");
+            form?.requestSubmit();
+          }}
+          className="flex items-center gap-3 text-xs font-semibold uppercase disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          Proceed
+          <span className="flex h-9 w-9 rotate-45 items-center justify-center border border-black">
+            <span className="-rotate-45">→</span>
+          </span>
+        </button>
+      </footer>
+    </main>
   );
 }
