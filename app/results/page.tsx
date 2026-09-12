@@ -16,7 +16,7 @@ type SelectionKey = "race" | "age" | "gender";
 const categoryLabels: Record<SelectionKey, string> = {
   race: "Race",
   age: "Age",
-  gender: "Gender",
+  gender: "Sex",
 };
 
 export default function ResultsPage() {
@@ -24,30 +24,13 @@ export default function ResultsPage() {
 
   const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
 
+  const [activeCategory, setActiveCategory] = useState<SelectionKey>("race");
+
   const [selected, setSelected] = useState<Record<SelectionKey, string>>({
     race: "",
     age: "",
     gender: "",
   });
-
-  useEffect(() => {
-    const saved = localStorage.getItem("skinstricAnalysis");
-
-    if (!saved) {
-      router.push("/analysis");
-      return;
-    }
-
-    const parsed: AnalysisData = JSON.parse(saved);
-
-    setAnalysis(parsed);
-
-    setSelected({
-      race: getHighestScore(parsed.race)?.[0] ?? "",
-      age: getHighestScore(parsed.age)?.[0] ?? "",
-      gender: getHighestScore(parsed.gender)?.[0] ?? "",
-    });
-  }, [router]);
 
   function getHighestScore(scores?: DemographicScores) {
     if (!scores) {
@@ -63,6 +46,30 @@ export default function ResultsPage() {
     return [...entries].sort((a, b) => b[1] - a[1])[0];
   }
 
+  useEffect(() => {
+    const saved = localStorage.getItem("skinstricAnalysis");
+
+    if (!saved) {
+      router.push("/analysis");
+      return;
+    }
+
+    try {
+      const parsed: AnalysisData = JSON.parse(saved);
+
+      setAnalysis(parsed);
+
+      setSelected({
+        race: getHighestScore(parsed.race)?.[0] ?? "",
+        age: getHighestScore(parsed.age)?.[0] ?? "",
+        gender: getHighestScore(parsed.gender)?.[0] ?? "",
+      });
+    } catch (error) {
+      console.error("Unable to load analysis results:", error);
+      router.push("/analysis");
+    }
+  }, [router]);
+
   const sortedResults = useMemo(() => {
     if (!analysis) {
       return null;
@@ -70,164 +77,187 @@ export default function ResultsPage() {
 
     return {
       race: Object.entries(analysis.race ?? {}).sort((a, b) => b[1] - a[1]),
+
       age: Object.entries(analysis.age ?? {}).sort((a, b) => b[1] - a[1]),
+
       gender: Object.entries(analysis.gender ?? {}).sort((a, b) => b[1] - a[1]),
     };
   }, [analysis]);
 
   if (!analysis || !sortedResults) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white text-black">
-        <p className="text-sm uppercase">Loading analysis...</p>
+      <main className="flex min-h-screen items-center justify-center bg-[#FCFCFC] text-black">
+        <p className="text-[10px] font-semibold uppercase">
+          Loading analysis...
+        </p>
       </main>
     );
   }
 
+  const activeResults = sortedResults[activeCategory];
+
+  const activeSelection = selected[activeCategory];
+
+  const selectedScore =
+    activeResults.find(([label]) => label === activeSelection)?.[1] ?? 0;
+
+  const confidencePercentage = Math.round(selectedScore * 100);
+
   return (
-    <main className="flex min-h-screen flex-col bg-white text-black">
+    <main className="flex min-h-screen flex-col bg-[#FCFCFC] text-black">
       {/* HEADER */}
-      <header className="flex items-center justify-between px-6 py-5 md:px-10">
-        <div className="flex items-center gap-4">
-          <h1 className="text-sm font-bold uppercase tracking-tight">
+      <header className="flex items-center px-5 py-5 md:px-8">
+        <div className="flex items-center gap-3">
+          <h1 className="text-[11px] font-semibold uppercase tracking-tight">
             Skinstric
           </h1>
 
-          <span className="hidden text-xs uppercase text-gray-500 sm:block">
+          <span className="text-[10px] uppercase text-gray-500">
             [ Analysis ]
           </span>
         </div>
-
-        <button
-          type="button"
-          className="bg-black px-4 py-2 text-xs font-semibold uppercase text-white"
-        >
-          Enter Code
-        </button>
       </header>
 
       {/* MAIN */}
-      <section className="flex-1 px-6 py-10 md:px-10">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-10">
-            <p className="text-xs font-semibold uppercase">A.I. Analysis</p>
+      <section className="flex-1 px-5 pt-4 md:px-8">
+        {/* TITLE */}
+        <div>
+          <p className="text-[11px] font-semibold uppercase">A.I. Analysis</p>
 
-            <h2 className="mt-2 text-4xl font-normal uppercase tracking-tight md:text-5xl">
-              Demographics
-            </h2>
+          <h2 className="mt-2 text-4xl font-normal uppercase tracking-[-0.04em] sm:text-5xl md:text-6xl">
+            Demographics
+          </h2>
 
-            <p className="mt-2 text-sm uppercase text-gray-500">
-              Predicted race, age and gender
-            </p>
-          </div>
+          <p className="mt-2 text-[10px] font-medium uppercase">
+            Predicted Race & Age
+          </p>
+        </div>
 
-          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr_1fr]">
-            {/* SELECTED VALUES */}
-            <aside className="space-y-3">
-              {(["race", "age", "gender"] as SelectionKey[]).map((category) => (
-                <div
+        {/* RESULTS */}
+        <div className="mt-10 grid gap-4 lg:grid-cols-[220px_1fr_330px]">
+          {/* CATEGORY SELECTOR */}
+          <aside className="space-y-[2px]">
+            {(["race", "age", "gender"] as SelectionKey[]).map((category) => {
+              const active = activeCategory === category;
+
+              return (
+                <button
                   key={category}
-                  className="border-t border-black bg-gray-100 p-5"
+                  type="button"
+                  onClick={() => setActiveCategory(category)}
+                  className={`w-full border-t border-black px-4 py-5 text-left transition ${
+                    active
+                      ? "bg-[#1A1A1A] text-white"
+                      : "bg-[#EAEAEA] text-black hover:bg-[#DDDDDD]"
+                  }`}
                 >
-                  <p className="text-xs uppercase text-gray-500">
-                    {categoryLabels[category]}
-                  </p>
-
-                  <p className="mt-3 text-2xl font-normal capitalize">
+                  <p className="text-xl font-normal capitalize">
                     {selected[category] || "Unknown"}
                   </p>
-                </div>
-              ))}
-            </aside>
 
-            {/* CENTER PANEL */}
-            <div className="flex min-h-[430px] flex-col justify-between border-t border-black bg-gray-100 p-8">
-              <div>
-                <p className="text-xs uppercase text-gray-500">
-                  Selected Demographics
-                </p>
+                  <p
+                    className={`mt-2 text-[9px] font-medium uppercase ${
+                      active ? "text-white" : "text-gray-600"
+                    }`}
+                  >
+                    {categoryLabels[category]}
+                  </p>
+                </button>
+              );
+            })}
+          </aside>
 
-                <div className="mt-8 space-y-8">
-                  <div>
-                    <p className="text-sm uppercase text-gray-500">Race</p>
-                    <p className="mt-2 text-4xl font-light capitalize">
-                      {selected.race}
-                    </p>
-                  </div>
+          {/* SELECTED RESULT / CONFIDENCE */}
+          <div className="flex min-h-[430px] flex-col justify-between border-t border-black bg-[#F1F1F1] p-6 sm:p-8">
+            <p className="text-3xl font-light capitalize sm:text-4xl">
+              {activeSelection || "Unknown"}
+            </p>
 
-                  <div>
-                    <p className="text-sm uppercase text-gray-500">Age</p>
-                    <p className="mt-2 text-4xl font-light">{selected.age}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm uppercase text-gray-500">Gender</p>
-                    <p className="mt-2 text-4xl font-light capitalize">
-                      {selected.gender}
-                    </p>
-                  </div>
+            <div className="flex flex-1 items-center justify-center">
+              <div
+                className="relative flex h-56 w-56 items-center justify-center rounded-full sm:h-64 sm:w-64"
+                style={{
+                  background: `conic-gradient(
+                    #1A1A1A ${confidencePercentage}%,
+                    #D9D9D9 ${confidencePercentage}% 100%
+                  )`,
+                }}
+              >
+                <div className="flex h-[94%] w-[94%] items-center justify-center rounded-full bg-[#F1F1F1]">
+                  <p className="text-4xl font-light">
+                    {confidencePercentage}
+                    <span className="text-xl">%</span>
+                  </p>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <p className="mt-8 max-w-sm text-xs uppercase leading-5 text-gray-500">
-                Click any value in the confidence table to update the selected
-                demographic.
+          {/* CONFIDENCE OPTIONS */}
+          <div className="border-t border-black bg-[#F1F1F1]">
+            <div className="flex items-center justify-between px-4 py-4">
+              <p className="text-[10px] font-semibold uppercase">
+                {categoryLabels[activeCategory]}
+              </p>
+
+              <p className="text-[10px] font-semibold uppercase">
+                A.I. Confidence
               </p>
             </div>
 
-            {/* CONFIDENCE TABLES */}
-            <div className="space-y-6">
-              {(["race", "age", "gender"] as SelectionKey[]).map((category) => (
-                <div key={category} className="border-t border-black pt-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold uppercase">
-                      {categoryLabels[category]}
-                    </p>
+            <div>
+              {activeResults.map(([label, score]) => {
+                const active = selected[activeCategory] === label;
 
-                    <p className="text-xs uppercase text-gray-500">
-                      Confidence
-                    </p>
-                  </div>
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() =>
+                      setSelected((previous) => ({
+                        ...previous,
+                        [activeCategory]: label,
+                      }))
+                    }
+                    className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm transition ${
+                      active ? "bg-[#1A1A1A] text-white" : "hover:bg-[#E2E2E2]"
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className={`flex h-3 w-3 items-center justify-center rounded-full border ${
+                          active ? "border-white" : "border-black"
+                        }`}
+                      >
+                        {active && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
 
-                  <div className="space-y-1">
-                    {sortedResults[category].map(([label, score]) => {
-                      const active = selected[category] === label;
+                      <span className="capitalize">{label}</span>
+                    </span>
 
-                      return (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() =>
-                            setSelected((prev) => ({
-                              ...prev,
-                              [category]: label,
-                            }))
-                          }
-                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition ${
-                            active ? "bg-black text-white" : "hover:bg-gray-100"
-                          }`}
-                        >
-                          <span className="capitalize">{label}</span>
-
-                          <span>{(score * 100).toFixed(2)}%</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+                    <span>{(score * 100).toFixed(0)}%</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
+
+        <p className="mt-6 text-[9px] font-medium uppercase">
+          If A.I. estimate is wrong, select the correct one.
+        </p>
       </section>
 
       {/* FOOTER */}
-      <footer className="flex items-center justify-between px-6 py-6 md:px-10">
+      <footer className="flex items-center justify-between px-5 py-6 md:px-8">
         <button
           type="button"
           onClick={() => router.push("/analysis")}
-          className="flex items-center gap-3 text-xs font-semibold uppercase"
+          className="flex items-center gap-3 text-[9px] font-medium uppercase"
         >
-          <span className="flex h-9 w-9 rotate-45 items-center justify-center border border-black">
+          <span className="flex h-7 w-7 rotate-45 items-center justify-center border border-black">
             <span className="-rotate-45">←</span>
           </span>
           Back
@@ -235,11 +265,11 @@ export default function ResultsPage() {
 
         <button
           type="button"
-          onClick={() => router.push("/selfie")}
-          className="flex items-center gap-3 text-xs font-semibold uppercase"
+          onClick={() => router.push("/")}
+          className="flex items-center gap-3 text-[9px] font-medium uppercase"
         >
-          Proceed
-          <span className="flex h-9 w-9 rotate-45 items-center justify-center border border-black">
+          Home
+          <span className="flex h-7 w-7 rotate-45 items-center justify-center border border-black">
             <span className="-rotate-45">→</span>
           </span>
         </button>

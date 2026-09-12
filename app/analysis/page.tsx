@@ -12,19 +12,27 @@ type AnalysisResponse = {
   [key: string]: unknown;
 };
 
+type PhaseTwoResponse = {
+  success?: boolean;
+  message?: string;
+  data?: AnalysisResponse;
+};
+
+type Stage = "choose" | "galleryPreview" | "preparing" | "menu";
+
 export default function AnalysisPage() {
   const router = useRouter();
 
-  const [preview, setPreview] = useState<string>("");
-  const [imageBase64, setImageBase64] = useState<string>("");
-  const [loading, setLoading] = useState(false);
+  const [stage, setStage] = useState<Stage>("choose");
+  const [preview, setPreview] = useState("");
+  const [imageBase64, setImageBase64] = useState("");
+  const [cameraPermissionOpen, setCameraPermissionOpen] = useState(false);
   const [error, setError] = useState("");
-  const [results, setResults] = useState<AnalysisResponse | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("skinstricUser");
+    const savedUser = localStorage.getItem("skinstricUser");
 
-    if (!saved) {
+    if (!savedUser) {
       router.push("/");
     }
   }, [router]);
@@ -42,7 +50,6 @@ export default function AnalysisPage() {
     }
 
     setError("");
-    setResults(null);
 
     const reader = new FileReader();
 
@@ -50,9 +57,8 @@ export default function AnalysisPage() {
       const result = reader.result as string;
 
       setPreview(result);
-
-      const base64 = result.split(",")[1] ?? "";
-      setImageBase64(base64);
+      setImageBase64(result.split(",")[1] ?? "");
+      setStage("galleryPreview");
     };
 
     reader.onerror = () => {
@@ -62,14 +68,14 @@ export default function AnalysisPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleAnalyze = async () => {
+  const analyzeImage = async () => {
     if (!imageBase64) {
-      setError("Please upload an image first.");
+      setError("Please select an image first.");
       return;
     }
 
-    setLoading(true);
     setError("");
+    setStage("preparing");
 
     try {
       const response = await fetch(
@@ -98,213 +104,338 @@ export default function AnalysisPage() {
           `API error ${response.status}: ${errorText || response.statusText}`,
         );
 
+        setStage("galleryPreview");
         return;
       }
 
-      const data: AnalysisResponse = await response.json();
+      const responseData: PhaseTwoResponse = await response.json();
 
-      console.log("Phase Two response:", data);
+      console.log("Phase Two response:", responseData);
 
-      setResults(data.data as AnalysisResponse);
+      if (!responseData.data) {
+        throw new Error("The analysis response did not contain result data.");
+      }
 
       localStorage.setItem(
-  "skinstricAnalysis",
-  JSON.stringify(data.data)
-);
+        "skinstricAnalysis",
+        JSON.stringify(responseData.data),
+      );
 
+      setStage("menu");
     } catch (err) {
       console.error(err);
       setError("Something went wrong while analyzing the image.");
-    } finally {
-      setLoading(false);
+      setStage("galleryPreview");
     }
   };
 
-  const getTopResult = (scores?: DemographicScores) => {
-    if (!scores) {
-      return null;
+  const handleBack = () => {
+    setError("");
+
+    if (stage === "galleryPreview") {
+      setPreview("");
+      setImageBase64("");
+      setStage("choose");
+      return;
     }
 
-    const entries = Object.entries(scores);
-
-    if (entries.length === 0) {
-      return null;
+    if (stage === "menu") {
+      setStage("choose");
+      return;
     }
 
-    return entries.sort((a, b) => b[1] - a[1])[0];
+    router.push("/");
   };
-
-  const topRace = getTopResult(results?.race);
-  const topAge = getTopResult(results?.age);
-  const topGender = getTopResult(results?.gender);
 
   return (
-    <main className="flex min-h-screen flex-col bg-white text-black">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-[#FCFCFC] text-black">
       {/* HEADER */}
-      <header className="flex items-center justify-between px-6 py-5 md:px-10">
-        <div className="flex items-center gap-4">
-          <h1 className="text-sm font-bold uppercase tracking-tight">
+      <header className="relative z-30 flex items-center px-5 py-5 md:px-8">
+        <div className="flex items-center gap-3">
+          <h1 className="text-[11px] font-semibold uppercase tracking-tight">
             Skinstric
           </h1>
 
-          <span className="hidden text-xs uppercase text-gray-500 sm:block">
-            [ Analysis ]
+          <span className="text-[10px] uppercase text-gray-500">
+            {stage === "menu" ? "[ Analysis ]" : "[ Intro ]"}
           </span>
         </div>
-
-        <button
-          type="button"
-          className="bg-black px-4 py-2 text-xs font-semibold uppercase text-white"
-        >
-          Enter Code
-        </button>
       </header>
 
-      {/* CONTENT */}
-      <section className="flex flex-1 items-center justify-center px-6 py-12">
-        <div className="w-full max-w-5xl">
-          <div className="mb-10">
-            <p className="text-xs font-semibold uppercase">To Start Analysis</p>
-
-            <h2 className="mt-2 text-3xl font-normal uppercase tracking-tight md:text-4xl">
-              Upload an image
-            </h2>
-
-            <p className="mt-2 text-sm text-gray-500">
-              Select a clear photo to begin your demographic analysis.
+      {/* CHOOSE CAMERA OR GALLERY */}
+      {stage === "choose" && (
+        <>
+          <section className="relative flex flex-1 flex-col px-5 pt-2 md:px-8">
+            <p className="text-[10px] font-semibold uppercase">
+              To Start Analysis
             </p>
-          </div>
 
-          <div className="grid gap-10 lg:grid-cols-2">
-            {/* UPLOAD */}
-            <div className="flex min-h-[420px] flex-col items-center justify-center border border-black p-8 text-center">
-              {preview ? (
-                <>
-                  <img
-                    src={preview}
-                    alt="Uploaded preview"
-                    className="mb-6 max-h-72 w-full object-contain"
-                  />
+            <div className="flex flex-1 items-center justify-center">
+              <div className="grid w-full max-w-4xl gap-16 md:grid-cols-2">
+                {/* CAMERA */}
+                <button
+                  type="button"
+                  onClick={() => setCameraPermissionOpen(true)}
+                  className="group relative mx-auto flex h-[300px] w-[300px] items-center justify-center sm:h-[340px] sm:w-[340px]"
+                >
+                  <div className="absolute h-[220px] w-[220px] rotate-45 border border-dotted border-gray-300 transition group-hover:scale-105 sm:h-[250px] sm:w-[250px]" />
 
-                  <label className="cursor-pointer border border-black px-6 py-3 text-xs font-bold uppercase transition hover:bg-black hover:text-white">
-                    Choose Another Image
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="hidden"
-                    />
-                  </label>
-                </>
-              ) : (
-                <>
-                  <div className="mb-8 flex h-40 w-40 rotate-45 items-center justify-center border border-black">
-                    <span className="-rotate-45 text-5xl font-light">+</span>
+                  <div className="relative z-10 flex items-center gap-8">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-black">
+                      <span className="text-4xl">◉</span>
+                    </div>
+
+                    <p className="max-w-[120px] text-left text-[10px] font-medium uppercase leading-4">
+                      Allow A.I.
+                      <br />
+                      to scan your face
+                    </p>
+                  </div>
+                </button>
+
+                {/* GALLERY */}
+                <label className="group relative mx-auto flex h-[300px] w-[300px] cursor-pointer items-center justify-center sm:h-[340px] sm:w-[340px]">
+                  <div className="absolute h-[220px] w-[220px] rotate-45 border border-dotted border-gray-300 transition group-hover:scale-105 sm:h-[250px] sm:w-[250px]" />
+
+                  <div className="relative z-10 flex items-center gap-8">
+                    <p className="max-w-[120px] text-right text-[10px] font-medium uppercase leading-4">
+                      Allow A.I.
+                      <br />
+                      access gallery
+                    </p>
+
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-black">
+                      <span className="text-4xl">◒</span>
+                    </div>
                   </div>
 
-                  <label className="cursor-pointer text-sm font-semibold uppercase">
-                    Upload Image
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="hidden"
-                    />
-                  </label>
-                </>
-              )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {error && (
+              <p className="pb-4 text-center text-xs text-red-600">{error}</p>
+            )}
+          </section>
+
+          <footer className="px-5 py-5 md:px-8">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="flex items-center gap-3 text-[9px] font-medium uppercase"
+            >
+              <span className="flex h-7 w-7 rotate-45 items-center justify-center border border-black">
+                <span className="-rotate-45">←</span>
+              </span>
+              Back
+            </button>
+          </footer>
+        </>
+      )}
+
+      {/* CAMERA CONFIRMATION — FIGMA 006 */}
+      {cameraPermissionOpen && stage === "choose" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/5 px-6">
+          <div className="w-full max-w-sm bg-[#1C1C1C] text-white shadow-2xl">
+            <p className="px-5 py-5 text-[11px] font-medium uppercase">
+              Allow A.I. to access your camera
+            </p>
+
+            <div className="flex justify-end gap-7 border-t border-white/30 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setCameraPermissionOpen(false)}
+                className="text-[9px] uppercase text-gray-300"
+              >
+                Deny
+              </button>
 
               <button
                 type="button"
-                onClick={handleAnalyze}
-                disabled={!imageBase64 || loading}
-                className="mt-8 bg-black px-7 py-3 text-xs font-bold uppercase text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                onClick={() => {
+                  setCameraPermissionOpen(false);
+                  router.push("/selfie");
+                }}
+                className="text-[9px] font-medium uppercase text-white"
               >
-                {loading ? "Analyzing..." : "Analyze"}
+                Allow
               </button>
-
-              {error && <p className="mt-5 text-sm text-red-600">{error}</p>}
-            </div>
-
-            {/* RESULTS */}
-            <div className="min-h-[420px] border border-black p-8">
-              <p className="text-xs font-semibold uppercase text-gray-500">
-                Analysis Results
-              </p>
-
-              {!results ? (
-                <div className="flex h-[320px] items-center justify-center text-center text-sm text-gray-400">
-                  Your demographic results will appear here after analysis.
-                </div>
-              ) : (
-                <div className="mt-8 space-y-8">
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Race</p>
-
-                    <p className="mt-2 text-3xl font-light capitalize">
-                      {topRace?.[0] ?? "Unknown"}
-                    </p>
-
-                    <p className="mt-1 text-sm text-gray-500">
-                      {topRace ? `${(topRace[1] * 100).toFixed(2)}%` : ""}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Age</p>
-
-                    <p className="mt-2 text-3xl font-light">
-                      {topAge?.[0] ?? "Unknown"}
-                    </p>
-
-                    <p className="mt-1 text-sm text-gray-500">
-                      {topAge ? `${(topAge[1] * 100).toFixed(2)}%` : ""}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs uppercase text-gray-500">Gender</p>
-
-                    <p className="mt-2 text-3xl font-light capitalize">
-                      {topGender?.[0] ?? "Unknown"}
-                    </p>
-
-                    <p className="mt-1 text-sm text-gray-500">
-                      {topGender ? `${(topGender[1] * 100).toFixed(2)}%` : ""}
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
-      </section>
+      )}
 
-      {/* FOOTER */}
-      <footer className="flex items-center justify-between px-6 py-6 md:px-10">
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="flex items-center gap-3 text-xs font-semibold uppercase"
-        >
-          <span className="flex h-9 w-9 rotate-45 items-center justify-center border border-black">
-            <span className="-rotate-45">←</span>
-          </span>
-          Back
-        </button>
+      {/* GALLERY PREVIEW */}
+      {stage === "galleryPreview" && (
+        <>
+          <section className="flex flex-1 flex-col px-5 pt-2 md:px-8">
+            <p className="text-[10px] font-semibold uppercase">
+              To Start Analysis
+            </p>
 
-        <button
-          type="button"
-          onClick={() => router.push("/results")}
-          disabled={!results}
-          className="flex items-center gap-3 text-xs font-semibold uppercase disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          Proceed
-          <span className="flex h-9 w-9 rotate-45 items-center justify-center border border-black">
-            <span className="-rotate-45">→</span>
-          </span>
-        </button>
-      </footer>
+            <div className="flex flex-1 items-center justify-center">
+              <div className="w-full max-w-3xl text-center">
+                <div className="mx-auto flex min-h-[430px] items-center justify-center overflow-hidden bg-[#D9D9D9]">
+                  <img
+                    src={preview}
+                    alt="Selected image preview"
+                    className="max-h-[520px] w-full object-contain"
+                  />
+                </div>
+
+                <p className="mt-5 text-[9px] uppercase text-gray-500">
+                  Selected image
+                </p>
+
+                {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
+              </div>
+            </div>
+          </section>
+
+          <footer className="flex items-center justify-between px-5 py-5 md:px-8">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex items-center gap-3 text-[9px] font-medium uppercase"
+            >
+              <span className="flex h-7 w-7 rotate-45 items-center justify-center border border-black">
+                <span className="-rotate-45">←</span>
+              </span>
+              Back
+            </button>
+
+            <button
+              type="button"
+              onClick={analyzeImage}
+              className="flex items-center gap-3 text-[9px] font-medium uppercase"
+            >
+              Proceed
+              <span className="flex h-7 w-7 rotate-45 items-center justify-center border border-black">
+                <span className="-rotate-45">→</span>
+              </span>
+            </button>
+          </footer>
+        </>
+      )}
+
+      {/* PREPARING ANALYSIS — FIGMA 011 */}
+      {stage === "preparing" && (
+        <section className="flex flex-1 items-center justify-center px-6">
+          <div className="relative flex h-[360px] w-[360px] items-center justify-center sm:h-[450px] sm:w-[450px]">
+            <div className="absolute h-[190px] w-[190px] rotate-[34deg] border border-dotted border-gray-300 sm:h-[240px] sm:w-[240px]" />
+
+            <div className="absolute h-[230px] w-[230px] rotate-[45deg] border border-dotted border-gray-300 sm:h-[290px] sm:w-[290px]" />
+
+            <div className="absolute h-[270px] w-[270px] rotate-[58deg] border border-dotted border-gray-300 sm:h-[340px] sm:w-[340px]" />
+
+            <p className="relative z-10 text-[10px] font-semibold uppercase">
+              Preparing your analysis...
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* A.I. ANALYSIS MENU — FIGMA 012 */}
+      {stage === "menu" && (
+        <>
+          <section className="flex flex-1 flex-col px-5 pt-2 md:px-8">
+            <div>
+              <p className="text-[11px] font-semibold uppercase">
+                A.I. Analysis
+              </p>
+
+              <p className="mt-3 max-w-[280px] text-[9px] uppercase leading-4">
+                A.I. has estimated the following.
+                <br />
+                Fix estimated information if needed.
+              </p>
+            </div>
+
+            <div className="flex flex-1 items-center justify-center">
+              <div className="relative flex h-[390px] w-[390px] items-center justify-center sm:h-[460px] sm:w-[460px]">
+                <div className="absolute h-[320px] w-[320px] rotate-45 border border-dotted border-gray-300 sm:h-[370px] sm:w-[370px]" />
+
+                <div className="grid h-[240px] w-[240px] rotate-45 grid-cols-2 grid-rows-2 gap-[2px] sm:h-[280px] sm:w-[280px]">
+                  {/* DEMOGRAPHICS */}
+                  <button
+                    type="button"
+                    onClick={() => router.push("/results")}
+                    className="flex items-center justify-center bg-[#E1E1E1] transition hover:bg-[#D3D3D3]"
+                  >
+                    <span className="-rotate-45 text-[10px] font-semibold uppercase">
+                      Demographics
+                    </span>
+                  </button>
+
+                  {/* COSMETIC */}
+                  <button
+                    type="button"
+                    className="flex cursor-default items-center justify-center bg-[#EFEFEF]"
+                  >
+                    <span className="-rotate-45 text-center text-[9px] font-medium uppercase">
+                      Cosmetic
+                      <br />
+                      Concerns
+                    </span>
+                  </button>
+
+                  {/* SKIN TYPE */}
+                  <button
+                    type="button"
+                    className="flex cursor-default items-center justify-center bg-[#EFEFEF]"
+                  >
+                    <span className="-rotate-45 text-center text-[9px] font-medium uppercase">
+                      Skin Type
+                      <br />
+                      Details
+                    </span>
+                  </button>
+
+                  {/* WEATHER */}
+                  <button
+                    type="button"
+                    className="flex cursor-default items-center justify-center bg-[#EFEFEF]"
+                  >
+                    <span className="-rotate-45 text-[9px] font-medium uppercase">
+                      Weather
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <footer className="flex items-center justify-between px-5 py-5 md:px-8">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="flex items-center gap-3 text-[9px] font-medium uppercase"
+            >
+              <span className="flex h-7 w-7 rotate-45 items-center justify-center border border-black">
+                <span className="-rotate-45">←</span>
+              </span>
+              Back
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/results")}
+              className="flex items-center gap-3 text-[9px] font-medium uppercase"
+            >
+              Get Summary
+              <span className="flex h-7 w-7 rotate-45 items-center justify-center border border-black">
+                <span className="-rotate-45">→</span>
+              </span>
+            </button>
+          </footer>
+        </>
+      )}
     </main>
   );
 }
